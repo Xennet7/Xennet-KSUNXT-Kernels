@@ -22,7 +22,7 @@ jobs:
 
     env:
       GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
-      RELEASE_NAME: "GKI Kernels With WKSU & SUSFS v1.5.9"
+      RELEASE_NAME: "GKI Kernels With XKNXT & SUSFS v1.5.9"
       RELEASE_BODY:
     steps:
       - name: Maximize Build Space
@@ -63,8 +63,24 @@ jobs:
               echo "COMMIT_URL_${var_name}=$COMMIT_URL" >> "$GITHUB_ENV"
             fi
           done
+      
+      
+      - name: Generate and Create New Tag
+        run: |
+            LATEST_TAG=$(gh api repos/${{ github.repository }}/tags --jq '.[0].name')
+            if [ -z "$LATEST_TAG" ]; then
+              LATEST_TAG="v1-X0"
+            fi
+            
+            NEW_TAG=$(echo "$LATEST_TAG" | awk -F'-r' '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-r%d", $1, suffix}')
+    
+            echo "New tag: $NEW_TAG"
+            echo "NEW_TAG=${NEW_TAG}" >> $GITHUB_ENV
 
+            git tag $NEW_TAG
+            git push origin $NEW_TAG
 
+     
       - name: Download Artifacts
         uses: actions/download-artifact@v5
         with:
