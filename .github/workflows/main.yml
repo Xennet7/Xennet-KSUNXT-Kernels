@@ -89,6 +89,17 @@ jobs:
           path: ./downloaded-artifacts
           pattern: '*-make'
 
+      - name: Debug artifact download
+        uses: actions/download-artifact@v5
+        with:
+          path: ./downloaded-artifacts
+          pattern: '*-make'
+
+      - name: List downloaded artifacts
+        run: |
+          echo "Contents of downloaded-artifacts:"
+          ls -R downloaded-artifacts || echo "Folder empty"
+
       - name: Set release body
         run: |
           cat << 'EOF' > release_body.md
