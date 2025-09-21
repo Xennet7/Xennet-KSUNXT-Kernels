@@ -135,18 +135,29 @@ jobs:
           name: ${{ env.RELEASE_NAME }}
           body_path: release_body.md
 
+      #- name: Upload Release Assets
+        #env:
+         # GH_TOKEN: ${{ github.token }}
+        #run: |
+         # for file in ./downloaded-artifacts/*/*; do
+           # if [ -d "$file" ]; then
+             # continue
+            #fi
+           # echo "Uploading $file..."
+          #  gh release upload ${{ env.NEW_TAG }} "$file"
+          #done
+     
+      
       - name: Upload Release Assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for file in ./downloaded-artifacts/*/*; do
-            if [ -d "$file" ]; then
-              continue
-            fi
-            echo "Uploading $file..."
-            gh release upload ${{ env.NEW_TAG }} "$file"
+          find ./downloaded-artifacts -type f | while read -r file; do
+          echo "Uploading $file..."
+          gh release upload "${NEW_TAG}" "$file" --clobber
           done
 
+          
       - name: Display Files Uploaded
         run: |
           echo "GitHub release created with the following files:"
