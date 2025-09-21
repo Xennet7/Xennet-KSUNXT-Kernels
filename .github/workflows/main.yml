@@ -154,7 +154,7 @@ jobs:
         run: |
           find ./downloaded-artifacts -type f | while read -r file; do
           echo "Uploading $file..."
-          gh release upload "${NEW_TAG}" "$file" --clobber
+          gh release upload ${{ env.NEW_TAG }} "$file" --clobber
           done
 
           
