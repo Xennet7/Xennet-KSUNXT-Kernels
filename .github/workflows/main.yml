@@ -71,7 +71,7 @@ jobs:
         run: |
             LATEST_TAG=$(gh api repos/${{ github.repository }}/tags --jq '.[0].name')
             if [ -z "$LATEST_TAG" ]; then
-              LATEST_TAG="v1.5.9-v0"
+              LATEST_TAG="v1.5.9"
             fi
             
             NEW_TAG=$(echo "$LATEST_TAG" | awk -F'-r' '{suffix=$2; if (!suffix) suffix=0; suffix++; printf "%s-r%d", $1, suffix}')
@@ -121,11 +121,8 @@ jobs:
       
           Managers:
           -> Next: https://github.com/KernelSU-Next/KernelSU-Next
-          
-          Version (at the time of release):
-          -> XKNXT: [${{ env.KSUVER }}]
-
-          -> SUSFS4KSU: 
+        
+          SUSFS4KSU: 
             -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
           EOF
 
@@ -139,6 +136,8 @@ jobs:
           body_path: release_body.md
 
       - name: Upload Release Assets
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           for file in ./downloaded-artifacts/*/*; do
             if [ -d "$file" ]; then
