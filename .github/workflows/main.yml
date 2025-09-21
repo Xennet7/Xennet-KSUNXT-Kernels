@@ -87,13 +87,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           path: ./downloaded-artifacts
-          pattern: '*-make'
-
-      - name: Debug artifact download
-        uses: actions/download-artifact@v5
-        with:
-          path: ./downloaded-artifacts
-          pattern: '*-make'
+          pattern: '*-normal'
 
       - name: List downloaded artifacts
         run: |
@@ -146,26 +140,16 @@ jobs:
           name: ${{ env.RELEASE_NAME }}
           body_path: release_body.md
 
-      #- name: Upload Release Assets
-        #env:
-         # GH_TOKEN: ${{ github.token }}
-        #run: |
-         # for file in ./downloaded-artifacts/*/*; do
-           # if [ -d "$file" ]; then
-             # continue
-            #fi
-           # echo "Uploading $file..."
-          #  gh release upload ${{ env.NEW_TAG }} "$file"
-          #done
-     
-      
       - name: Upload Release Assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          find ./downloaded-artifacts -type f | while read -r file; do
-          echo "Uploading $file..."
-          gh release upload ${{ env.NEW_TAG }} "$file" --clobber
+          for file in ./downloaded-artifacts/*/*; do
+            if [ -d "$file" ]; then
+              continue
+            fi
+            echo "Uploading $file..."
+            gh release upload ${{ env.NEW_TAG }} "$file"
           done
 
           
