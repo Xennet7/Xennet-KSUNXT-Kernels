@@ -107,7 +107,7 @@ jobs:
           -> Xennet KSUNXT - [XKNXT] - Android15-6.6 Kernels
           -> Use KernelSU-Next Manager Only
           -> SUSFS ඞ v1.5.10
-          -> Scope-Minimized Manual hooks v1.5
+          -> Scope-Minimized Manual hooks v1.4
           -> Magic Mount Support
           -> IPSet Support for Advanced Network Filtering
           -> Wireguard Support
