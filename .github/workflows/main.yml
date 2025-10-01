@@ -131,7 +131,7 @@ jobs:
           -> WKSU: [${{ env.WKSU_REF }}](${{ env.WKSU_URL }})
           
           -> SUSFS4KSU:
-              -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
+            -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
           EOF
 
       - name: Create GitHub Release
