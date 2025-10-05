@@ -1,1 +1,1 @@
-# 🔥 XENNET KSU NEXT Kernels
+# 🔥 XENNET KernelSu Next Kernels
