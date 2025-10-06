@@ -233,7 +233,7 @@ jobs:
           cp ../../kernel_patches/next/scope_min_manual_hooks_v1.4.patch ./
           patch -p1 --forward -F 3 < scope_min_manual_hooks_v1.4.patch
 
-       - name: Add BBG
+      - name: Add BBG
         run: |
           cd "$CONFIG"
           echo "Adding BBG..."
