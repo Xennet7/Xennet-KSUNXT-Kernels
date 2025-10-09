@@ -28,7 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        apply_module_check_bypass: [true, false]
+        apply_module_check_bypass: [false]
+        #apply_module_check_bypass: [true, false]
 
     steps:
       # # - name: Maximize Build Space
