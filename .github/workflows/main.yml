@@ -25,15 +25,6 @@ jobs:
       RELEASE_NAME: "GKI Kernels With XKNXT & SUSFS v1.5.11"
       RELEASE_BODY:
     steps:
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 8192
-          temp-reserve-mb: 2048
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
       #- name: Maximize Build Space
       #  uses: AdityaGarg8/remove-unwanted-software@v5
       #  with:
@@ -80,6 +71,13 @@ jobs:
           WKSU_URL="https://github.com/KernelSU-Next/KernelSU-Next/commit/$WKSU_REF"
           echo "WKSU_REF=$WKSU_REF" >> $GITHUB_ENV
           echo "WKSU_URL=$WKSU_URL" >> $GITHUB_ENV
+
+          # Get Baseband-guard latest commit from main branch
+          BBG_REF=$(git ls-remote "https://github.com/vc-teahouse/Baseband-guard.git" refs/heads/main | awk '{print $1}')
+          BBG_URL="https://github.com/vc-teahouse/Baseband-guard/commit/$BBG_REF"
+          echo "BBG_REF=$BBG_REF" >> $GITHUB_ENV
+          echo "BBG_URL=$BBG_URL" >> $GITHUB_ENV
+
       
       - name: Generate and Create New Tag
         env:
@@ -103,7 +101,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           path: ./downloaded-artifacts
-          pattern: '*-normal'
+          pattern: 'XNXT-*-AnyKernel3'
 
       - name: List downloaded artifacts
         run: |
@@ -118,20 +116,19 @@ jobs:
           This software is provided for testing and educational purposes only. Use at your own risk.
           The developers are not responsible for any damage, data loss, or issues that may occur.
           Please ensure you have proper backups before installation.
+
+          NEW:
+          -> **Module Check Bypass Variant**: Normal build with additional hack for compatibility, if you encounter any issues with the normal build try this!
       
           Features:
           -> Xennet KSUNXT - [XKNXT] - Android15-6.6 Kernels
           -> Use KernelSU-Next Manager Only
           -> SUSFS ඞ v1.5.11
           -> Scope-Minimized Manual hooks v1.4
-          -> Magic Mount Support
           -> IPSet Support for Advanced Network Filtering
           -> Wireguard Support
           -> BBR v1 Support
           -> Added BBG support to prevent unauthorised writes to certain partitions: https://github.com/vc-teahouse/Baseband-guard
-      
-          Build Types:
-          -> **Kernel GKI Build**: Built using Bazel or build.sh
 
           Notes:
           -> SUS SU Mode 2 will show as disabled or not compatble due to non-kprobe hooks and is not needed anymore!
@@ -146,6 +143,8 @@ jobs:
         
           Commit Hashes (at the time of release):
           -> XENNET Next: [${{ env.WKSU_REF }}](${{ env.WKSU_URL }})
+
+          -> Baseband-guard: [${{ env.BBG_REF }}](${{ env.BBG_URL }})
           
           -> SUSFS4KSU:
             -> gki-android15-6.6: [${{ env.COMMIT_HASH_gki_android15_6_6 }}](${{ env.COMMIT_URL_gki_android15_6_6 }})
