@@ -25,10 +25,10 @@ on:
 jobs:
   build-gki:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
     strategy:
+      fail-fast: false
       matrix:
-        build_type: ["normal"]
+        apply_module_check_bypass: [true, false]
 
     steps:
       # # - name: Maximize Build Space
@@ -54,8 +54,6 @@ jobs:
 
       - name: Setup Build Environment
         run: |
-          sudo apt update && sudo apt install -y libelf-dev libssl-dev build-essential
-          
           AOSP_MIRROR=https://android.googlesource.com
           BRANCH=main-kernel-2025
           git clone $AOSP_MIRROR/kernel/prebuilts/build-tools -b $BRANCH --depth 1 kernel-build-tools &
@@ -241,17 +239,16 @@ jobs:
           echo "CONFIG_BBG=y" >> common/arch/arm64/configs/gki_defconfig
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/landlock/landlock,baseband_guard/ } }' common/security/Kconfig    
 
-      #- name: Apply Module Symbol Version Fix Patch
-        #run: |
-          #if [[ "${{ inputs.kernel_version }}" == "6.1" || "${{ inputs.kernel_version }}" == "6.6" ]]; then
-            #cd "$CONFIG/common/kernel/module"
-            #sed -i 's/pr_warn("%s: disagrees about version of symbol %s\\n"/pr_warn("%s: disagrees about version of symbol %s, but ignore...\\n"/' version.c
-            #sed -i '/bad_version:/{:a;n;/return 0;/{s/return 0;/return 1;/;b};ba}' version.c
-          #else
-            #cd "$CONFIG/common/kernel"
-            #sed -i 's/pr_warn("%s: disagrees about version of symbol %s\\n"/pr_warn("%s: disagrees about version of symbol %s, but ignore...\\n"/' module.c
-            #sed -i '/bad_version:/{:a;n;/return 0;/{s/return 0;/return 1;/;b};ba}' module.c
-          #fi
+      - name: Apply Module Check Bypass
+        if: ${{ matrix.apply_module_check_bypass }}
+        run: |
+          if [[ "${{ inputs.kernel_version }}" == "6.1" || "${{ inputs.kernel_version }}" == "6.6" ]]; then
+            cd "$CONFIG/common/kernel/module"
+            sed -i '/bad_version:/{:a;n;/return 0;/{s/return 0;/return 1;/;b};ba}' version.c
+          else
+            cd "$CONFIG/common/kernel"
+            sed -i '/bad_version:/{:a;n;/return 0;/{s/return 0;/return 1;/;b};ba}' module.c
+          fi
 
       - name: Fix WiFi and Bluetooth on Samsung 6.6 GKI devices
         if: ${{ ( inputs.kernel_version == '6.6' ) }}
@@ -314,16 +311,17 @@ jobs:
           echo "CONFIG_IP_SET_HASH_NETNET=y" >> "$defconfig"
           echo "CONFIG_IP_SET_HASH_NETPORT=y" >> "$defconfig"
           echo "CONFIG_IP_SET_HASH_NETIFACE=y" >> "$defconfig"
+         
           # SUSFS Configuration
           echo "CONFIG_KSU_SUSFS=y" >> "$defconfig"
-          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$defconfig"
+          #echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$defconfig"
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$defconfig"
           
           # SUSFS Auto Mount Features
           echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$defconfig"
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$defconfig"
           
           # SUSFS Advanced Features
@@ -350,33 +348,22 @@ jobs:
       - name: Change Kernel Name
         run: |
           cd "$CONFIG"
-          
-          perl -pi -e 's/-dirty//' ./common/scripts/setlocalversion
-          perl -pi -e 's/-maybe-dirty//g' ./build/kernel/kleaf/impl/stamp.bzl
-
+          #Add Xennet to Kernel Version
+          sed -i '$s|echo "\$res"|echo "\$res-Xennet"|' ./common/scripts/setlocalversion
           #Set Kernel Timestamp
           perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Mon Dec 30 17:07:07 UTC 2024"}' ./common/scripts/mkcompile_h
-          
-          #Set Kernel Name
-          if [ "${{ matrix.build_type }}" = "make" ] && [ "${{ inputs.kernel_version }}" = "6.6" ]; then
-            perl -0777 -pi -e 's/(echo "\$\{KERNELVERSION\}\$\{file_localversion\}\$\{config_localversion\}\$\{LOCALVERSION\}\$\{scm_version\}")/echo "\$\{KERNELVERSION\}-${{ inputs.android_version }}-Xennet"/s' ./common/scripts/setlocalversion
-          elif [ "${{ matrix.build_type }}" = "make" ]; then
-            perl -0777 -pi -e 's/(echo "\$res")(?!.*echo "\$res")/echo "\-${{ inputs.android_version }}-Xennet"/s' ./common/scripts/setlocalversion
-          elif [ "${{ matrix.build_type }}" = "normal" ] && [ "${{ inputs.kernel_version }}" = "6.6" ]; then
-            perl -0777 -pi -e 's/(echo "\$\{KERNELVERSION\}\$\{file_localversion\}\$\{config_localversion\}\$\{LOCALVERSION\}\$\{scm_version\}")/echo "\$\{KERNELVERSION\}\$\{file_localversion\}\$\{config_localversion\}\$\{LOCALVERSION\}\$\{scm_version\}-Xennet"/s' ./common/scripts/setlocalversion
-          elif [ "${{ matrix.build_type }}" = "normal" ]; then
-            perl -0777 -pi -e 's/(echo "\$res")(?!.*echo "\$res")/echo "\$res-Xennet"/s' ./common/scripts/setlocalversion
+          if [ -f "build/build.sh" ]; then
+            #Remove Dirty Flag
+            sed -i 's/-dirty//' ./common/scripts/setlocalversion
+          else
+            #Remove Dirty Flag
+            sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
+            #Remove Abi Exports and Error
+            rm -rf ./common/android/abi_gki_protected_exports_*
+            perl -pi -e 's/^\s*"protected_exports_list"\s*:\s*"android\/abi_gki_protected_exports_aarch64",\s*$//;' ./common/BUILD.bazel
           fi
-
-          #Set Kernel Timestamp
-          perl -pi -e 's/build-timestamp = \$\(or \$\(KBUILD_BUILD_TIMESTAMP\), \$\(build-timestamp-auto\)\)/build-timestamp = "Mon Dec 30 17:07:07 UTC 2024"/' ./common/init/Makefile
-              
-          #Remove Abi Exports and Error
-          rm -rf ./common/android/abi_gki_protected_exports_*
-          perl -pi -e 's/^\s*"protected_exports_list"\s*:\s*"android\/abi_gki_protected_exports_aarch64",\s*$//;' ./common/BUILD.bazel
-
+            
       - name: Build
-        if: ${{ matrix.build_type == 'normal' }}
         run : |
           set -e
           set -x
@@ -387,100 +374,6 @@ jobs:
           else
             tools/bazel build --config=fast --lto=thin //common:kernel_aarch64_dist || exit 1
           fi
-
-      - name: Detect Clang Version from Configs
-        if: ${{ matrix.build_type == 'make' }}
-        run: |
-          KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG"
-          DEFCONFIG="$KERNEL_PATH/common/arch/arm64/configs/gki_defconfig"
-          BUILDCONFIG="$KERNEL_PATH/common/build.config.gki"
-          CONSTANTSCONFIG="$KERNEL_PATH/common/build.config.constants"
-          CLANG_VERSION=""
-          CLANG_BIN_PATH=""
-          if grep -q '^CONFIG_CLANG_VERSION=' "$DEFCONFIG" 2>/dev/null; then
-            CLANG_VERSION=$(grep '^CONFIG_CLANG_VERSION=' "$DEFCONFIG" 2>/dev/null | head -n1 | cut -d'=' -f2 | tr -d '"' | xargs)
-          elif grep -q '^CLANG_VERSION=' "$BUILDCONFIG" 2>/dev/null; then
-            CLANG_VERSION=$(grep '^CLANG_VERSION=' "$BUILDCONFIG" 2>/dev/null | head -n1 | cut -d'=' -f2 | xargs)
-          elif grep -q '^CLANG_VERSION=' "$CONSTANTSCONFIG" 2>/dev/null; then
-            CLANG_VERSION=$(grep '^CLANG_VERSION=' "$CONSTANTSCONFIG" 2>/dev/null | head -n1 | cut -d'=' -f2 | xargs)
-            CLANG_VERSION="clang-$CLANG_VERSION"
-          else
-            echo "No clang version found in config, will auto-detect in prebuilts."
-          fi
-          if [ -z "$CLANG_VERSION" ]; then
-            if [ -d "$KERNEL_PATH/prebuilts/clang/host/linux-x86" ]; then
-              CLANG_VERSION=$(ls -d "$KERNEL_PATH"/prebuilts/clang/host/linux-x86/clang-r*/ | tail -n 1 | xargs basename)
-              CLANG_BIN_PATH="$KERNEL_PATH/prebuilts/clang/host/linux-x86/$CLANG_VERSION/bin"
-            elif [ -d "$KERNEL_PATH/prebuilts-master/clang/host/linux-x86" ]; then
-              CLANG_VERSION=$(ls -d "$KERNEL_PATH"/prebuilts-master/clang/host/linux-x86/clang-r*/ | tail -n 1 | xargs basename)
-              CLANG_BIN_PATH="$KERNEL_PATH/prebuilts-master/clang/host/linux-x86/$CLANG_VERSION/bin"
-            else
-              CLANG_VERSION="clang"
-              CLANG_BIN_PATH="$KERNEL_PATH/prebuilts/clang/host/linux-x86/$CLANG_VERSION/bin" # dummy
-            fi
-          else
-            if [ -d "$KERNEL_PATH/prebuilts/clang/host/linux-x86" ]; then
-              CLANG_BIN_PATH="$KERNEL_PATH/prebuilts/clang/host/linux-x86/$CLANG_VERSION/bin"
-            else
-              CLANG_BIN_PATH="$KERNEL_PATH/prebuilts-master/clang/host/linux-x86/$CLANG_VERSION/bin"
-            fi
-          fi
-          echo "CLANG_VERSION=$CLANG_VERSION" >> $GITHUB_ENV
-          echo "CLANG_BIN_PATH=$CLANG_BIN_PATH" >> $GITHUB_ENV
-
-
-      - name: Build Kernel
-        if: ${{ matrix.build_type == 'make' }}
-        run: |
-          KERNEL_PATH="$GITHUB_WORKSPACE/$CONFIG"
-          CLANG_BIN_PATH="${{ env.CLANG_BIN_PATH }}"
-          CLANG_VERSION="${{ env.CLANG_VERSION }}"
-          
-          if [ -d "$CLANG_BIN_PATH" ] && [ -x "$CLANG_BIN_PATH/clang" ]; then
-            export PATH="$CLANG_BIN_PATH:$PATH"
-            SELECTED_CLANG="$CLANG_BIN_PATH/clang"
-          elif command -v clang >/dev/null 2>&1; then
-            SELECTED_CLANG="$(command -v clang)"
-            exit 1
-          else
-            exit 1
-          fi
-          
-          LLVM_TOOLS="clang ld.lld llvm-ar llvm-objcopy llvm-objdump llvm-nm"
-          MISSING_TOOLS=""
-          for tool in $LLVM_TOOLS; do
-            if ! command -v $tool >/dev/null 2>&1; then
-              MISSING_TOOLS="$MISSING_TOOLS $tool"
-            fi
-          done
-          
-          if [ -n "$MISSING_TOOLS" ]; then
-            sudo apt-get update
-            sudo apt-get install -yq --no-install-recommends llvm
-            for tool in $MISSING_TOOLS; do
-              if ! command -v $tool >/dev/null 2>&1; then
-                exit 1
-              fi
-            done
-          fi
-          
-          KERNEL_VERSION="${{ inputs.kernel_version }}"
-          if [[ "$KERNEL_VERSION" == "5.10" ]]; then
-            USE_LLVM_IAS=true
-          fi
-          
-          cd "$KERNEL_PATH/common" || exit 1
-          
-          MAKE_ARGS="LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- \
-            RUSTC=$KERNEL_PATH/prebuilts/rust/linux-x86/1.73.0b/bin/rustc \
-            PAHOLE=$KERNEL_PATH/prebuilts/kernel-build-tools/linux-x86/bin/pahole \
-            LD=ld.lld HOSTLD=ld.lld"
-          if [[ -v USE_LLVM_IAS ]]; then
-            MAKE_ARGS="LLVM_IAS=1 $MAKE_ARGS"
-          fi
-          
-          make -j$(nproc --all) O=out $MAKE_ARGS KCFLAGS+="-Wno-error -O2 -flto=thin -fno-stack-protector" gki_defconfig Image Image.gz Image.lz4 || exit 1
-          make -j$(nproc --all) O=out $MAKE_ARGS KCFLAGS+="-Wno-error -O2 -flto=thin -fno-stack-protector" || exit 1
 
       - name: Create AK3 ZIP
         run: |
