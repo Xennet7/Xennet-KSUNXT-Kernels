@@ -349,16 +349,22 @@ jobs:
       - name: Change Kernel Name
         run: |
           cd "$CONFIG"
-          #Add Xennet to Kernel Version
-          sed -i '$s|echo "\$res"|echo "\$res-Xennet"|' ./common/scripts/setlocalversion
           #Set Kernel Timestamp
           perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Mon Dec 30 17:07:07 UTC 2024"}' ./common/scripts/mkcompile_h
+          #Set Kernel Name
+          if [ "${{ inputs.kernel_version }}" = "6.6" ]; then
+            perl -0777 -pi -e 's/(echo "\$\{KERNELVERSION\}\$\{file_localversion\}\$\{config_localversion\}\$\{LOCALVERSION\}\$\{scm_version\}")/echo "\$\{KERNELVERSION\}\$\{file_localversion\}\$\{config_localversion\}\$\{LOCALVERSION\}\$\{scm_version\}-Xennet"/s' ./common/scripts/setlocalversion
+          else
+            perl -0777 -pi -e 's/(echo "\$res")(?!.*echo "\$res")/echo "\$res-Xennet"/s' ./common/scripts/setlocalversion
+          fi
+          #Set Kernel Timestamp
+          perl -pi -e 's/build-timestamp = \$\(or \$\(KBUILD_BUILD_TIMESTAMP\), \$\(build-timestamp-auto\)\)/build-timestamp = "Mon Dec 30 17:07:07 UTC 2024"/' ./common/init/Makefile
           if [ -f "build/build.sh" ]; then
             #Remove Dirty Flag
-            sed -i 's/-dirty//' ./common/scripts/setlocalversion
+            perl -pi -e 's/-dirty//' ./common/scripts/setlocalversion
           else
             #Remove Dirty Flag
-            sed -i "/stable_scmversion_cmd/s/-maybe-dirty//g" ./build/kernel/kleaf/impl/stamp.bzl
+            perl -pi -e 's/-maybe-dirty//g' ./build/kernel/kleaf/impl/stamp.bzl
             #Remove Abi Exports and Error
             rm -rf ./common/android/abi_gki_protected_exports_*
             perl -pi -e 's/^\s*"protected_exports_list"\s*:\s*"android\/abi_gki_protected_exports_aarch64",\s*$//;' ./common/BUILD.bazel
