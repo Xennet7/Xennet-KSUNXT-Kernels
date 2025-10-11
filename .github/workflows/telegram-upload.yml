@@ -1,5 +1,9 @@
 name: Upload Release to Telegram
 
+permissions:
+  contents: write
+  actions: write
+
 on:
   workflow_dispatch:
     inputs:
