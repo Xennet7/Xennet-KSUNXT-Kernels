@@ -15,52 +15,45 @@ jobs:
       contents: read
 
     steps:
-      # Step 1: Get release by tag (if provided)
-      - name: Get Release by Tag
-        if: ${{ github.event.inputs.tag_name != '' }}
-        id: release_by_tag
-        uses: octokit/request-action@v2.x
+      # Step 1: Get release by tag or latest
+      - name: Get release info
+        id: get_release
+        uses: actions/github-script@v7
         with:
-          route: GET /repos/${{ github.repository }}/releases/tags/${{ github.event.inputs.tag_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = '${{ github.event.inputs.tag_name }}';
+            let release;
+            if (tag) {
+              release = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag
+              }).then(r => r.data).catch(() => null);
+            }
+            if (!release) {
+              release = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              }).then(r => r.data);
+            }
+            // Save assets array to a simple text file (one URL per line)
+            const urls = release.assets.map(a => a.browser_download_url).join('\n');
+            require('fs').writeFileSync('assets.txt', urls);
+            console.log(`Found ${release.assets.length} assets.`);
 
-      # Step 2: Get latest release (if no tag)
-      - name: Get Latest Release
-        if: ${{ github.event.inputs.tag_name == '' }}
-        id: release_latest
-        uses: octokit/request-action@v2.x
-        with:
-          route: GET /repos/${{ github.repository }}/releases/latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Step 3: Save release JSON safely
-      - name: Save Release JSON
-        shell: bash
-        run: |
-          if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
-            echo '${{ steps.release_by_tag.outputs.data }}' > release.json
-          else
-            echo '${{ steps.release_latest.outputs.data }}' > release.json
-
-      # Step 4: Upload each asset to Telegram
-      - name: Upload Assets
+      # Step 2: Upload assets one by one
+      - name: Upload Assets to Telegram
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          # Get all asset download URLs
-          mapfile -t assets < <(jq -r '.assets[]?.browser_download_url' release.json)
-
-          if [ ${#assets[@]} -eq 0 ]; then
-            echo "❌ No assets found in the release."
+          if [ ! -s assets.txt ]; then
+            echo "❌ No assets found to upload."
             exit 0
           fi
 
-          # Loop through each asset and upload individually
-          for url in "${assets[@]}"; do
+          while read -r url; do
             filename=$(basename "$url")
             echo "Downloading $filename..."
             curl -L -o "$filename" "$url"
@@ -69,4 +62,4 @@ jobs:
             curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
               -F chat_id="${TELEGRAM_CHAT_ID}" \
               -F document=@"$filename"
-          done
+          done < assets.txt
