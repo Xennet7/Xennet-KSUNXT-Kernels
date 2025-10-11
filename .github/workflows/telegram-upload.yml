@@ -1,10 +1,10 @@
-name: Upload Release to Telegram
+name: Upload Release Assets to Telegram
 
 on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Enter a release tag (leave empty to use the latest)"
+        description: "Enter release tag (leave empty to use latest)"
         required: false
         default: ""
 
@@ -15,15 +15,7 @@ jobs:
       contents: read
 
     steps:
-      # Step 1: Verify Telegram Bot
-      - name: Verify Telegram Bot
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        run: |
-          echo "Testing Telegram bot connection..."
-          curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
-
-      # Step 2: Get Release by Tag (only if tag provided)
+      # Step 1: Get release by tag (if provided)
       - name: Get Release by Tag
         if: ${{ github.event.inputs.tag_name != '' }}
         id: release_by_tag
@@ -33,7 +25,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 3: Get Latest Release (only if no tag)
+      # Step 2: Get latest release (if no tag)
       - name: Get Latest Release
         if: ${{ github.event.inputs.tag_name == '' }}
         id: release_latest
@@ -43,7 +35,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 4: Save Release JSON to File
+      # Step 3: Save release JSON safely
       - name: Save Release JSON
         shell: bash
         run: |
@@ -52,19 +44,14 @@ jobs:
           else
             echo '${{ steps.release_latest.outputs.data }}' > release.json
 
-      # Step 5: Upload Each Asset to Telegram
-      - name: Upload Assets to Telegram
+      # Step 4: Upload each asset to Telegram
+      - name: Upload Assets
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          # Parse release info
-          tag_name=$(jq -r '.tag_name' release.json)
-          html_url=$(jq -r '.html_url' release.json)
-          body=$(jq -r '.body' release.json)
-
-          # Get all asset URLs
+          # Get all asset download URLs
           mapfile -t assets < <(jq -r '.assets[]?.browser_download_url' release.json)
 
           if [ ${#assets[@]} -eq 0 ]; then
@@ -81,12 +68,5 @@ jobs:
             echo "Uploading $filename to Telegram..."
             curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
               -F chat_id="${TELEGRAM_CHAT_ID}" \
-              -F document=@"$filename" \
-              -F caption="📦 *${{ github.repository }}*
-              🔖 *Release:* ${tag_name}
-              🔗 [View on GitHub](${html_url})
-
-              📝 *Changelog:*
-              $body" \
-              -F parse_mode="Markdown"
+              -F document=@"$filename"
           done
