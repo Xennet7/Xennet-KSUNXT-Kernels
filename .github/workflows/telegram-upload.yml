@@ -1,1 +1,73 @@
+name: Upload Release to Telegram
 
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Enter a release tag (leave empty to use the latest release)"
+        required: false
+        default: ""
+
+jobs:
+  telegram-upload:
+    name: Send Release Assets to Telegram
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Verify Telegram Bot Connection
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          echo "Testing Telegram bot connection..."
+          curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
+
+      - name: Get release info
+        id: release
+        uses: octokit/request-action@v2.x
+        with:
+          route: ${{ github.event.inputs.tag_name && format('GET /repos/{owner}/{repo}/releases/tags/{tag}', github.repository_owner, github.event.repository.name, github.event.inputs.tag_name) || format('GET /repos/{owner}/{repo}/releases/latest', github.repository_owner, github.event.repository.name) }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download and Send Assets to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          echo "Fetching assets for release..."
+          assets=$(echo '${{ steps.release.outputs.data }}' | jq -r '.assets[]?.browser_download_url')
+          tag_name=$(echo '${{ steps.release.outputs.data }}' | jq -r '.tag_name')
+          html_url=$(echo '${{ steps.release.outputs.data }}' | jq -r '.html_url')
+          body=$(echo '${{ steps.release.outputs.data }}' | jq -r '.body' | sed 's/"/\\"/g' | sed 's/$/\\n/' )
+
+          if [ -z "$assets" ]; then
+            echo "❌ No assets found in the release."
+            exit 0
+          fi
+
+          # If body is too long, truncate to ~3500 chars (Telegram limit ~4096)
+          body_short=$(echo "$body" | head -c 3500)
+
+          for url in $assets; do
+            filename=$(basename "$url")
+            echo "Downloading $filename..."
+            curl -L -o "$filename" "$url"
+
+            echo "Uploading $filename to Telegram..."
+            caption="📦 *${{ github.repository }}*
+🔖 *Release:* ${tag_name}
+🔗 [View on GitHub](${html_url})
+
+📝 *Changelog:*
+${body_short}"
+
+            # Upload document to Telegram
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              -F chat_id="${TELEGRAM_CHAT_ID}" \
+              -F document=@"$filename" \
+              -F caption="$caption" \
+              -F parse_mode="Markdown"
+          done
