@@ -4,9 +4,9 @@ permissions:
   contents: write
   actions: write
 
-on:
-  push:
-  workflow_dispatch:
+#on:
+  #push:
+  #workflow_dispatch:
 
 jobs:
   build-check:
