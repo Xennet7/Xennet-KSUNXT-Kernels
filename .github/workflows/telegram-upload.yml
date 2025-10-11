@@ -22,7 +22,7 @@ jobs:
           echo "Testing Telegram bot connection..."
           curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
 
-      - name: Get Release by Tag (if provided)
+      - name: Get Release by Tag
         if: ${{ github.event.inputs.tag_name != '' }}
         id: release_by_tag
         uses: octokit/request-action@v2.x
@@ -31,7 +31,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get Latest Release (if no tag provided)
+      - name: Get Latest Release
         if: ${{ github.event.inputs.tag_name == '' }}
         id: release_latest
         uses: octokit/request-action@v2.x
@@ -40,80 +40,47 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set Release Output Safely
-        id: release_output
-        shell: bash
+      - name: Set Release JSON
+        id: release_json
         run: |
-          if [[ -n "${{ github.event.inputs.tag_name }}" ]]; then
-            echo "Using tag release"
-            echo "data<<EOF" >> $GITHUB_OUTPUT
-            jq -c '.' <<< "${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+          if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
+            echo "data=${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_ENV
           else
-            echo "Using latest release"
-            echo "data<<EOF" >> $GITHUB_OUTPUT
-            jq -c '.' <<< "${{ steps.release_latest.outputs.data }}" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            echo "data=${{ steps.release_latest.outputs.data }}" >> $GITHUB_ENV
+          fi
 
-      - name: Download and Upload Assets to Telegram (Split Media Groups)
+      - name: Upload Each Asset to Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        shell: bash
         run: |
-          echo "Fetching assets for release..."
-          mapfile -t assets < <(echo "${{ steps.release_output.outputs.data }}" | jq -r '.assets[]?.browser_download_url')
-          tag_name=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.tag_name')
-          html_url=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.html_url')
-          body=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.body' | sed 's/"/\\"/g' | sed 's/$/\\n/')
+          echo "$data" > release.json
+
+          tag_name=$(jq -r '.tag_name' release.json)
+          html_url=$(jq -r '.html_url' release.json)
+          body=$(jq -r '.body' release.json)
+
+          mapfile -t assets < <(jq -r '.assets[]?.browser_download_url' release.json)
 
           if [ ${#assets[@]} -eq 0 ]; then
             echo "❌ No assets found in the release."
             exit 0
           fi
 
-          body_short=$(echo "$body" | head -c 3500)
-
-          # Download all files first
-          files=()
           for url in "${assets[@]}"; do
             filename=$(basename "$url")
             echo "Downloading $filename..."
             curl -L -o "$filename" "$url"
-            files+=("$filename")
-          done
 
-          # Split into chunks of 10 files (Telegram media group limit)
-          chunk_size=10
-          total=${#files[@]}
-          group_num=1
-          for ((i=0; i<total; i+=chunk_size)); do
-            chunk=("${files[@]:i:chunk_size}")
-            media_inputs=()
-            first_file=true
-            for f in "${chunk[@]}"; do
-              if $first_file; then
-                media_inputs+=("{\"type\":\"document\",\"media\":\"attach://$f\",\"caption\":\"📦 *${{ github.repository }}*\n🔖 *Release:* ${tag_name}\n🔗 [View on GitHub](${html_url})\n\n📝 *Changelog:*\n${body_short}\",\"parse_mode\":\"Markdown\"}")
-                first_file=false
-              else
-                media_inputs+=("{\"type\":\"document\",\"media\":\"attach://$f\"}")
-              fi
-            done
-
-            media_json=$(printf '%s,' "${media_inputs[@]}")
-            media_json="[${media_json%,}]"  # remove trailing comma
-
-            # Build -F attachments for curl
-            f_args=()
-            for f in "${chunk[@]}"; do
-              f_args+=(-F "$f=@$f")
-            done
-
-            echo "Uploading media group #$group_num with ${#chunk[@]} files..."
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
+            echo "Uploading $filename to Telegram..."
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
               -F chat_id="${TELEGRAM_CHAT_ID}" \
-              -F media="$media_json" \
-              "${f_args[@]}"
+              -F document=@"$filename" \
+              -F caption="📦 *${{ github.repository }}*
+              🔖 *Release:* ${tag_name}
+              🔗 [View on GitHub](${html_url})
 
-            group_num=$((group_num+1))
+              📝 *Changelog:*
+              $body" \
+              -F parse_mode="Markdown"
           done
