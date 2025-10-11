@@ -40,26 +40,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set Release JSON
-        id: release_json
+      - name: Save Release JSON to File
+        shell: bash
         run: |
           if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
-            echo "data=${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_ENV
+            echo '${{ steps.release_by_tag.outputs.data }}' > release.json
           else
-            echo "data=${{ steps.release_latest.outputs.data }}" >> $GITHUB_ENV
-          fi
+            echo '${{ steps.release_latest.outputs.data }}' > release.json
 
       - name: Upload Each Asset to Telegram
+        shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          echo "$data" > release.json
-
+          # Read release info
           tag_name=$(jq -r '.tag_name' release.json)
           html_url=$(jq -r '.html_url' release.json)
           body=$(jq -r '.body' release.json)
 
+          # Get asset URLs
           mapfile -t assets < <(jq -r '.assets[]?.browser_download_url' release.json)
 
           if [ ${#assets[@]} -eq 0 ]; then
@@ -67,6 +67,7 @@ jobs:
             exit 0
           fi
 
+          # Loop through each asset
           for url in "${assets[@]}"; do
             filename=$(basename "$url")
             echo "Downloading $filename..."
