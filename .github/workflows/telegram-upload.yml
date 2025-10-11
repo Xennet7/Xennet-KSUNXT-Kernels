@@ -42,15 +42,13 @@ jobs:
 
       - name: Set Release Output
         id: release_output
+        shell: bash
         run: |
-          if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
-            echo "data<<EOF" >> $GITHUB_OUTPUT
-            echo "${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+          if [[ "${{ github.event.inputs.tag_name }}" != "" ]]; then
+            printf 'data<<EOF\n%s\nEOF\n' "${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_OUTPUT
           else
-            echo "data<<EOF" >> $GITHUB_OUTPUT
-            echo "${{ steps.release_latest.outputs.data }}" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            printf 'data<<EOF\n%s\nEOF\n' "${{ steps.release_latest.outputs.data }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Download and Upload Assets to Telegram (Split Media Groups)
         env:
