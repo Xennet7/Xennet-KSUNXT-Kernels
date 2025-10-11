@@ -62,11 +62,10 @@ jobs:
 
             echo "Uploading $filename to Telegram..."
             caption="📦 *${{ github.repository }}*
-🔖 *Release:* ${tag_name}
-🔗 [View on GitHub](${html_url})
-
-📝 *Changelog:*
-${body_short}"
+            🔖 *Release:* ${tag_name}
+            🔗 [View on GitHub](${html_url})
+             📝 *Changelog:*
+             ${body_short}"
 
             # Upload document to Telegram
             curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
