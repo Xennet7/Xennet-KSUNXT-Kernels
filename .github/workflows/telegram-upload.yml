@@ -20,10 +20,10 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: |
-          echo "Testing Telegram bot..."
+          echo "Testing Telegram bot connection..."
           curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe"
 
-      # Step 2: Get Release by Tag (if tag provided)
+      # Step 2: Get Release by Tag (only if tag provided)
       - name: Get Release by Tag
         if: ${{ github.event.inputs.tag_name != '' }}
         id: release_by_tag
@@ -33,7 +33,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Step 3: Get Latest Release (if no tag)
+      # Step 3: Get Latest Release (only if no tag)
       - name: Get Latest Release
         if: ${{ github.event.inputs.tag_name == '' }}
         id: release_latest
@@ -52,7 +52,7 @@ jobs:
           else
             echo '${{ steps.release_latest.outputs.data }}' > release.json
 
-      # Step 5: Upload Assets One by One
+      # Step 5: Upload Each Asset to Telegram
       - name: Upload Assets to Telegram
         shell: bash
         env:
