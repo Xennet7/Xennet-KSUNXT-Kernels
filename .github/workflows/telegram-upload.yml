@@ -45,21 +45,20 @@ jobs:
 
       # Step 4: Save Release JSON to File
       - name: Save Release JSON
-        shell: bash
         run: |
           if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
             echo '${{ steps.release_by_tag.outputs.data }}' > release.json
           else
             echo '${{ steps.release_latest.outputs.data }}' > release.json
 
-      # Step 5: Upload Assets One by One to Telegram
+      # Step 5: Upload Each Asset to Telegram
       - name: Upload Assets to Telegram
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          # Parse release info
+          # Parse release info from JSON file
           tag_name=$(jq -r '.tag_name' release.json)
           html_url=$(jq -r '.html_url' release.json)
           body=$(jq -r '.body' release.json)
@@ -72,7 +71,7 @@ jobs:
             exit 0
           fi
 
-          # Loop through each asset
+          # Loop through each asset and upload individually
           for url in "${assets[@]}"; do
             filename=$(basename "$url")
             echo "Downloading $filename..."
