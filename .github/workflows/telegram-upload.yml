@@ -25,7 +25,7 @@ jobs:
       - name: Get Release by Tag (if provided)
         if: ${{ github.event.inputs.tag_name != '' }}
         id: release_by_tag
-        uses: octokit/request-action@v2.x
+        uses: octokit/request-action@v2
         with:
           route: GET /repos/${{ github.repository }}/releases/tags/${{ github.event.inputs.tag_name }}
         env:
@@ -34,7 +34,7 @@ jobs:
       - name: Get Latest Release (if no tag provided)
         if: ${{ github.event.inputs.tag_name == '' }}
         id: release_latest
-        uses: octokit/request-action@v2.x
+        uses: octokit/request-action@v2
         with:
           route: GET /repos/${{ github.repository }}/releases/latest
         env:
@@ -44,69 +44,10 @@ jobs:
         id: release_output
         run: |
           if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
-            echo "Using tag release"
             echo "data<<EOF" >> $GITHUB_OUTPUT
             echo "${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
           else
-            echo "Using latest release"
-            echo "data<<EOF" >> $GITHUB_OUTPUT
-            echo "${{ steps.release_latest.outputs.data }}" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Download and Send Assets to Telegram
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          echo "Fetching assets for release..."
-          assets=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.assets[]?.browser_download_url')
-          tag_name=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.tag_name')
-          html_url=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.html_url')
-          body=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.body' | sed 's/"/\\"/g' | sed 's/$/\\n/')
-
-          if [ -z "$assets" ]; then
-            echo "❌ No assets found in the release."
-            exit 0
-          fi
-
-          body_short=$(echo "$body" | head -c 3500)
-
-          for url in $assets; do
-            filename=$(basename "$url")
-            echo "Downloading $filename..."
-            curl -L -o "$filename" "$url"
-
-            echo "Uploading $filename to Telegram..."
-            caption="📦 *${{ github.repository }}*
-            🔖 *Release:* ${tag_name}
-            🔗 [View on GitHub](${html_url})
-
-            📝 *Changelog:*
-            ${body_short}"
-
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-              -F chat_id="${TELEGRAM_CHAT_ID}" \
-              -F document=@"$filename" \
-              -F caption="$caption" \
-              -F parse_mode="Markdown"
-          done        uses: octokit/request-action@v2.x
-        with:
-          route: GET /repos/${{ github.repository }}/releases/latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set Release Output
-        id: release_output
-        run: |
-          if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
-            echo "Using tag release"
-            echo "data<<EOF" >> $GITHUB_OUTPUT
-            echo "${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "Using latest release"
             echo "data<<EOF" >> $GITHUB_OUTPUT
             echo "${{ steps.release_latest.outputs.data }}" >> $GITHUB_OUTPUT
             echo "EOF" >> $GITHUB_OUTPUT
@@ -138,9 +79,10 @@ jobs:
             files+=("$filename")
           done
 
-          # Split into chunks of 10 files (Telegram media group limit)
+          # Split into chunks of 10 files
           chunk_size=10
           total=${#files[@]}
+          group_num=1
           for ((i=0; i<total; i+=chunk_size)); do
             chunk=("${files[@]:i:chunk_size}")
             media_inputs=()
@@ -163,64 +105,11 @@ jobs:
               f_args+=(-F "$f=@$f")
             done
 
-            echo "Uploading chunk of ${#chunk[@]} files..."
+            echo "Uploading media group #$group_num with ${#chunk[@]} files..."
             curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
               -F chat_id="${TELEGRAM_CHAT_ID}" \
               -F media="$media_json" \
               "${f_args[@]}"
-          done        if: ${{ github.event.inputs.tag_name == '' }}
-        id: release_latest
-        uses: octokit/request-action@v2.x
-        with:
-          route: GET /repos/${{ github.repository }}/releases/latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set Release Output
-        id: release_output
-        run: |
-          if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
-            echo "Using tag release"
-            echo "::set-output name=data::${{ steps.release_by_tag.outputs.data }}"
-          else
-            echo "Using latest release"
-            echo "::set-output name=data::${{ steps.release_latest.outputs.data }}"
-          fi
-
-      - name: Download and Send Assets to Telegram
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          echo "Fetching assets for release..."
-          assets=$(echo '${{ steps.release_output.outputs.data }}' | jq -r '.assets[]?.browser_download_url')
-          tag_name=$(echo '${{ steps.release_output.outputs.data }}' | jq -r '.tag_name')
-          html_url=$(echo '${{ steps.release_output.outputs.data }}' | jq -r '.html_url')
-          body=$(echo '${{ steps.release_output.outputs.data }}' | jq -r '.body' | sed 's/"/\\"/g' | sed 's/$/\\n/' )
-
-          if [ -z "$assets" ]; then
-            echo "❌ No assets found in the release."
-            exit 0
-          fi
-
-          body_short=$(echo "$body" | head -c 3500)
-
-          for url in $assets; do
-            filename=$(basename "$url")
-            echo "Downloading $filename..."
-            curl -L -o "$filename" "$url"
-
-            echo "Uploading $filename to Telegram..."
-            caption="📦 *${{ github.repository }}*
-            🔖 *Release:* ${tag_name}
-            🔗 [View on GitHub](${html_url})
-
-            📝 *Changelog:*
-            ${body_short}"
-
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-              -F chat_id="${TELEGRAM_CHAT_ID}" \
-              -F document=@"$filename" \
-              -F caption="$caption" \
-              -F parse_mode="Markdown"
+            group_num=$((group_num+1))
           done
