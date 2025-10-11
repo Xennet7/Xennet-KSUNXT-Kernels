@@ -40,20 +40,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set Release Output
+      - name: Set Release Output Safely
         id: release_output
         shell: bash
         run: |
-          if [[ "${{ github.event.inputs.tag_name }}" != "" ]]; then
-            printf 'data<<EOF\n%s\nEOF\n' "${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_OUTPUT
+          if [[ -n "${{ github.event.inputs.tag_name }}" ]]; then
+            echo "Using tag release"
+            echo "data<<EOF" >> $GITHUB_OUTPUT
+            jq -c '.' <<< "${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           else
-            printf 'data<<EOF\n%s\nEOF\n' "${{ steps.release_latest.outputs.data }}" >> $GITHUB_OUTPUT
-          fi
+            echo "Using latest release"
+            echo "data<<EOF" >> $GITHUB_OUTPUT
+            jq -c '.' <<< "${{ steps.release_latest.outputs.data }}" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Download and Upload Assets to Telegram (Split Media Groups)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        shell: bash
         run: |
           echo "Fetching assets for release..."
           mapfile -t assets < <(echo "${{ steps.release_output.outputs.data }}" | jq -r '.assets[]?.browser_download_url')
