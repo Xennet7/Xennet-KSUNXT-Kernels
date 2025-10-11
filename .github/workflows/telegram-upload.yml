@@ -4,15 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Enter a release tag (leave empty to use latest)"
+        description: "Enter a release tag (leave empty to use the latest)"
         required: false
         default: ""
 
 jobs:
   telegram-upload:
-    name: Send Release Assets to Telegram
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
 
@@ -35,6 +33,85 @@ jobs:
 
       - name: Get Latest Release (if no tag provided)
         if: ${{ github.event.inputs.tag_name == '' }}
+        id: release_latest
+        uses: octokit/request-action@v2.x
+        with:
+          route: GET /repos/${{ github.repository }}/releases/latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set Release Output
+        id: release_output
+        run: |
+          if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
+            echo "Using tag release"
+            echo "data<<EOF" >> $GITHUB_OUTPUT
+            echo "${{ steps.release_by_tag.outputs.data }}" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "Using latest release"
+            echo "data<<EOF" >> $GITHUB_OUTPUT
+            echo "${{ steps.release_latest.outputs.data }}" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Download and Upload Assets to Telegram (Split Media Groups)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          echo "Fetching assets for release..."
+          mapfile -t assets < <(echo "${{ steps.release_output.outputs.data }}" | jq -r '.assets[]?.browser_download_url')
+          tag_name=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.tag_name')
+          html_url=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.html_url')
+          body=$(echo "${{ steps.release_output.outputs.data }}" | jq -r '.body' | sed 's/"/\\"/g' | sed 's/$/\\n/')
+
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "❌ No assets found in the release."
+            exit 0
+          fi
+
+          body_short=$(echo "$body" | head -c 3500)
+
+          # Download all files first
+          files=()
+          for url in "${assets[@]}"; do
+            filename=$(basename "$url")
+            echo "Downloading $filename..."
+            curl -L -o "$filename" "$url"
+            files+=("$filename")
+          done
+
+          # Split into chunks of 10 files (Telegram media group limit)
+          chunk_size=10
+          total=${#files[@]}
+          for ((i=0; i<total; i+=chunk_size)); do
+            chunk=("${files[@]:i:chunk_size}")
+            media_inputs=()
+            first_file=true
+            for f in "${chunk[@]}"; do
+              if $first_file; then
+                media_inputs+=("{\"type\":\"document\",\"media\":\"attach://$f\",\"caption\":\"📦 *${{ github.repository }}*\n🔖 *Release:* ${tag_name}\n🔗 [View on GitHub](${html_url})\n\n📝 *Changelog:*\n${body_short}\",\"parse_mode\":\"Markdown\"}")
+                first_file=false
+              else
+                media_inputs+=("{\"type\":\"document\",\"media\":\"attach://$f\"}")
+              fi
+            done
+
+            media_json=$(printf '%s,' "${media_inputs[@]}")
+            media_json="[${media_json%,}]"  # remove trailing comma
+
+            # Build -F attachments for curl
+            f_args=()
+            for f in "${chunk[@]}"; do
+              f_args+=(-F "$f=@$f")
+            done
+
+            echo "Uploading chunk of ${#chunk[@]} files..."
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMediaGroup" \
+              -F chat_id="${TELEGRAM_CHAT_ID}" \
+              -F media="$media_json" \
+              "${f_args[@]}"
+          done        if: ${{ github.event.inputs.tag_name == '' }}
         id: release_latest
         uses: octokit/request-action@v2.x
         with:
