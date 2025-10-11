@@ -25,7 +25,7 @@ jobs:
       - name: Get Release by Tag (if provided)
         if: ${{ github.event.inputs.tag_name != '' }}
         id: release_by_tag
-        uses: octokit/request-action@v2
+        uses: octokit/request-action@v2.x
         with:
           route: GET /repos/${{ github.repository }}/releases/tags/${{ github.event.inputs.tag_name }}
         env:
@@ -34,7 +34,7 @@ jobs:
       - name: Get Latest Release (if no tag provided)
         if: ${{ github.event.inputs.tag_name == '' }}
         id: release_latest
-        uses: octokit/request-action@v2
+        uses: octokit/request-action@v2.x
         with:
           route: GET /repos/${{ github.repository }}/releases/latest
         env:
@@ -79,7 +79,7 @@ jobs:
             files+=("$filename")
           done
 
-          # Split into chunks of 10 files
+          # Split into chunks of 10 files (Telegram media group limit)
           chunk_size=10
           total=${#files[@]}
           group_num=1
