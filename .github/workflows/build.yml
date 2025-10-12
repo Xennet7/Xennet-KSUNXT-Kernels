@@ -18,9 +18,7 @@ on:
       os_patch_level:
         required: true
         type: string
-      revision:
-        required: false
-        type: string
+      
 
 jobs:
   build-gki:
