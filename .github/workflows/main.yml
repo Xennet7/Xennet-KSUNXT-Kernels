@@ -108,6 +108,42 @@ jobs:
           echo "Contents of downloaded-artifacts:"
           ls -R downloaded-artifacts || echo "Folder empty"
 
+      - name: Extract selected artifacts cleanly
+        run: |
+          echo "🔍 Selecting and extracting matching artifacts..."
+
+          mkdir -p temp temp_extract
+
+          # Step 1: Move only matching zips to temp/
+          MATCH_ZIP_PATTERNS=("*XKNXT-*-AnyKernel3")
+          for pattern in "${MATCH_ZIP_PATTERNS[@]}"; do
+          find downloaded-artifacts -maxdepth 2 -type f -name "$pattern" -exec mv -f {} temp/ \;
+          done
+
+          echo "✅ Selected zips moved to temp/:"
+          ls -lh temp/ || echo "No matching zips found!"
+
+          # Step 2: Extract zips from temp/ to temp_extract/
+          for zipfile in temp/*.zip; do
+          [ -e "$zipfile" ] || continue
+          echo "📦 Extracting: $zipfile"
+          unzip -q "$zipfile" -d temp_extract/
+          done
+
+          # Step 3: Move extracted files (not just zips) back to downloaded-artifacts/
+          MATCH_FILE_PATTERNS=("*-XKNXT-*-AnyKernel3")
+          for pattern in "${MATCH_FILE_PATTERNS[@]}"; do
+          find temp_extract -type f -name "$pattern" -exec mv -f {} downloaded-artifacts/ \;
+          done
+
+          # Step 4: Clean up
+          echo "🧹 Cleaning temporary folders..."
+          rm -rf temp temp_extract
+
+          echo "✅ Final files in downloaded-artifacts/:"
+          ls -lh downloaded-artifacts/ || echo "No extracted files found."
+
+          
       - name: Set release body
         run: |
           cat << 'EOF' > release_body.md
