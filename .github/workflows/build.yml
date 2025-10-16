@@ -237,7 +237,7 @@ jobs:
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/landlock/landlock,baseband_guard/ } }' common/security/Kconfig
 
       - name: Apply Module Check Bypass
-        if: ${{matrix.apply_module_check_bypass == 'bypass' }}
+        if: ${{ matrix.apply_module_check_bypass == 'bypass' }}
         run: |
           if [[ "${{ inputs.kernel_version }}" == "6.1" || "${{ inputs.kernel_version }}" == "6.6" ]]; then
             cd "$CONFIG/common/kernel/module"
