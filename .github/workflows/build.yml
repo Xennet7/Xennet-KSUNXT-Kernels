@@ -113,7 +113,6 @@ jobs:
           #  git checkout ef036830ec9d56035d63d328185281c09726b20f
           #  cd ..
           #fi
-
       - name: Initialize and Sync Kernel Source
         run: |
           mkdir -p "$CONFIG"
