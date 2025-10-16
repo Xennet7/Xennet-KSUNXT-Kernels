@@ -163,7 +163,7 @@ jobs:
           #fi
 
       - name: Fix Less Then 6.6.50 Builds
-        if: inputs.android_version == 'android15' && inputs.kernel_version == '6.6'
+        if: inputs.android_version == 'android15' && inputs.kernel_version == '6.6' && inputs.sub_level <= 50
         run: |
           cd "$CONFIG/common"
           if ! grep -qxF '#include <trace/hooks/fs.h>' ./fs/namespace.c; then
