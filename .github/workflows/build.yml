@@ -127,8 +127,7 @@ jobs:
           DEFAULT_MANIFEST_PATH=.repo/manifests/default.xml
           if grep -q deprecated <<< $REMOTE_BRANCH; then
             sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
-          fi
-          
+          fi 
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
 
       - name: Extract Actual Sublevel for LTS Builds
