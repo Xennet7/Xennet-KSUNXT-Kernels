@@ -113,6 +113,7 @@ jobs:
           #  git checkout ef036830ec9d56035d63d328185281c09726b20f
           #  cd ..
           #fi
+     
       - name: Initialize and Sync Kernel Source
         run: |
           mkdir -p "$CONFIG"
@@ -128,7 +129,6 @@ jobs:
             sed -i "s/\"${FORMATTED_BRANCH}\"/\"deprecated\/${FORMATTED_BRANCH}\"/g" $DEFAULT_MANIFEST_PATH
           fi 
           $REPO --trace sync -c -j$(nproc --all) --no-tags --fail-fast
-
       - name: Extract Actual Sublevel for LTS Builds
         if: inputs.sub_level == 'X'
         run: |
