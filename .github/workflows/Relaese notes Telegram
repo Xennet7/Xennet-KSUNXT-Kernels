@@ -1,1 +1,63 @@
 
+name: Send Release Notes to Telegram
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Enter release tag (leave empty to use latest)"
+        required: false
+        default: ""
+
+jobs:
+  release-notes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # Step 1: Get release info
+      - name: Get Release Info
+        id: get_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = '${{ github.event.inputs.tag_name }}';
+            let release;
+            if (tag) {
+              release = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag
+              }).then(r => r.data).catch(() => null);
+            }
+            if (!release) {
+              release = await github.rest.repos.getLatestRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              }).then(r => r.data);
+            }
+
+            if (!release.body || release.body.trim() === "") {
+              console.log("❌ Release notes are empty.");
+              process.exit(1);
+            }
+
+            console.log("📄 Release notes fetched:");
+            console.log(release.body);
+            core.setOutput("body", release.body);
+
+      # Step 2: Send release notes to Telegram
+      - name: Send Release Notes to Telegram
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          release_body="${{ steps.get_release.outputs.body }}"
+          echo "📄 Sending release notes to Telegram..."
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -F chat_id="${TELEGRAM_CHAT_ID}" \
+            -F text="📄 *Release Notes / Commits:*%0A$release_body" \
+            -F parse_mode=Markdown
+          echo "✅ Release notes sent successfully."
