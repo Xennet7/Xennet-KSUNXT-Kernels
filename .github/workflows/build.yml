@@ -148,7 +148,16 @@ jobs:
               
               cd ../..
               if [ -d "$OLD_CONFIG" ]; then
+                echo "Renaming directory from $OLD_CONFIG to $NEW_CONFIG"
                 mv "$OLD_CONFIG" "$NEW_CONFIG"
+                if [ ! -d "$NEW_CONFIG" ]; then
+                  echo "Error: Directory rename failed, $NEW_CONFIG does not exist"
+                  exit 1
+                fi
+                echo "Directory successfully renamed to $NEW_CONFIG"
+              else
+                echo "Error: Source directory $OLD_CONFIG does not exist"
+                exit 1
               fi
             fi
           fi
