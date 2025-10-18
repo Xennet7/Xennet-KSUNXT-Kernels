@@ -3,7 +3,7 @@
   contents: write
   actions: write 
 
-on:
+ on:
   workflow_call:
     inputs:
       android_version:
