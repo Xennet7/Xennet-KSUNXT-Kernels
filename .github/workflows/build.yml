@@ -192,29 +192,24 @@ jobs:
       - name: Apply SUSFS Patches for KernelSU Variants
         run: |
           cd "$CONFIG"
+
+          cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
+          cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+
           
           # Apply core SUSFS patches
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch ./common/
           cd common
           patch -p1 < 50_add_susfs_in_gki-${{ inputs.android_version }}-${{ inputs.kernel_version }}.patch || true
-          cd ..
-          cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
-          cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
           
           # Apply KSU integration patches
-          cd ./KernelSU-Next
+          cd ../KernelSU-Next
           cp ../../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch .
           patch -p1 < 10_enable_susfs_for_ksu.patch || true
           
           # Apply compatibility fixes
           cp ../../kernel_patches/next/susfs_fix_patches/v1.5.12/fix_core_hook.c.patch ./
           patch -p1 < fix_core_hook.c.patch
-          
-          ## Skip fix_rules.c.patch for Android 14 with kernel 6.1
-          #if [ "${{ inputs.android_version }}" != "android14" ] && [ "${{ inputs.kernel_version }}" != "6.1" ]; then
-          #  cp ../../kernel_patches/next/susfs_fix_patches/v1.5.12/fix_rules.c.patch ./
-          #  patch -p1 < fix_rules.c.patch
-          #fi
 
           cp ../../kernel_patches/next/susfs_fix_patches/v1.5.12/fix_sucompat.c.patch ./
           patch -p1 < fix_sucompat.c.patch
@@ -226,7 +221,7 @@ jobs:
         run: |
           cd "$CONFIG/common"
           cp ../../kernel_patches/next/scope_min_manual_hooks_v1.4.patch ./
-          patch -p1 --forward -F 3 < scope_min_manual_hooks_v1.4.patch
+          patch -p1 -F 3 < scope_min_manual_hooks_v1.4.patch
 
       - name: Add BBG
         run: |
@@ -328,7 +323,7 @@ jobs:
           echo "CONFIG_IP_SET_HASH_NETNET=y" >> "$defconfig"
           echo "CONFIG_IP_SET_HASH_NETPORT=y" >> "$defconfig"
           echo "CONFIG_IP_SET_HASH_NETIFACE=y" >> "$defconfig"
-         
+
           # SUSFS Configuration
           echo "CONFIG_KSU_SUSFS=y" >> "$defconfig"
           #echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$defconfig"
@@ -336,28 +331,35 @@ jobs:
           echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$defconfig"
           
-          # SUSFS Auto Mount Features
           echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$defconfig"
           
-          # SUSFS Advanced Features
           echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$defconfig"
           
-          # SUSFS Debugging and Security
           echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$defconfig"
           echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$defconfig"
+          
+          # Sound Configuration
+          #echo "CONFIG_SND=y" >> "$defconfig"
+          #echo "CONFIG_SND_DRIVERS=y" >> "$defconfig"
+          #echo "CONFIG_SND_PCM=y" >> "$defconfig"
+          #echo "CONFIG_SND_TIMER=y" >> "$defconfig"
+          #echo "CONFIG_SND_DYNAMIC_MINORS=y" >> "$defconfig"
+          #echo "CONFIG_SND_PROC_FS=y" >> "$defconfig"
+          #echo "CONFIG_SND_ALOOP=m" >> "$defconfig"
           
           # Build Optimization Configuration
           echo "CONFIG_LTO_CLANG_THIN=y" >> "$defconfig"
           echo "CONFIG_LTO_CLANG=y" >> "$defconfig"
           echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$defconfig"
           echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=n" >> "$defconfig"
+          echo "CONFIG_OPTIMIZE_INLINING=y" >> "$defconfig"
           
           # Remove check_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
