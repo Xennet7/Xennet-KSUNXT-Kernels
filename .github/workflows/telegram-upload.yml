@@ -15,8 +15,8 @@ jobs:
       contents: read
 
     steps:
-      # Step 1: Get release by tag or latest
-      - name: Get release info
+      # Step 1: Fetch release (by tag or latest)
+      - name: Get Release Info
         id: get_release
         uses: actions/github-script@v7
         with:
@@ -36,13 +36,13 @@ jobs:
                 repo: context.repo.repo
               }).then(r => r.data);
             }
-            // Save assets array to a simple text file (one URL per line)
+
             const urls = release.assets.map(a => a.browser_download_url).join('\n');
             require('fs').writeFileSync('assets.txt', urls);
             console.log(`Found ${release.assets.length} assets.`);
 
-      # Step 2: Upload assets one by one
-      - name: Upload Assets to Telegram
+      # Step 2: Upload assets one by one (with retry and logging)
+      - name: Upload Assets to Telegram (Safe Mode)
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -53,13 +53,39 @@ jobs:
             exit 0
           fi
 
-          while read -r url; do
+          echo "Starting uploads..."
+          while IFS= read -r url; do
+            [ -z "$url" ] && continue
             filename=$(basename "$url")
-            echo "Downloading $filename..."
-            curl -L -o "$filename" "$url"
+            echo "➡️ Processing: $filename"
 
-            echo "Uploading $filename to Telegram..."
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-              -F chat_id="${TELEGRAM_CHAT_ID}" \
-              -F document=@"$filename"
+            curl -L -o "$filename" "$url" || { echo "❌ Failed to download $filename"; continue; }
+
+            filesize=$(stat -c%s "$filename")
+            if [ "$filesize" -gt 2000000000 ]; then
+              echo "⚠️ Skipping $filename (size > 2GB)"
+              continue
+            fi
+
+            for attempt in 1 2 3; do
+              echo "📤 Upload attempt $attempt for $filename..."
+              response=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+                -F chat_id="${TELEGRAM_CHAT_ID}" \
+                -F document=@"$filename")
+
+              if echo "$response" | grep -q '"ok":true'; then
+                echo "✅ Uploaded $filename successfully."
+                break
+              else
+                echo "⚠️ Upload failed: $response"
+                if [ "$attempt" -eq 3 ]; then
+                  echo "❌ Giving up on $filename after 3 attempts."
+                else
+                  echo "🔁 Retrying in 10s..."
+                  sleep 10
+                fi
+              fi
+            done
           done < assets.txt
+
+          echo "🏁 All uploads attempted."
