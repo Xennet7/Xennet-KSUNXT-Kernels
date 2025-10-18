@@ -1,4 +1,4 @@
-name: Upload Release Assets to Telegram
+name: Upload Selected Release Assets to Telegram
 
 on:
   workflow_dispatch:
@@ -7,6 +7,10 @@ on:
         description: "Enter release tag (leave empty to use latest)"
         required: false
         default: ""
+      asset_pattern:
+        description: "Enter filename pattern(s), comma-separated. Example: XKNXT-*.zip,XKNXT-*-AnyKernel3.zip"
+        required: true
+        default: "XKNXT-*.zip"
 
 jobs:
   telegram-upload:
@@ -15,7 +19,7 @@ jobs:
       contents: read
 
     steps:
-      # Step 1: Fetch release (by tag or latest)
+      # Step 1: Fetch release info
       - name: Get Release Info
         id: get_release
         uses: actions/github-script@v7
@@ -37,55 +41,105 @@ jobs:
               }).then(r => r.data);
             }
 
-            const urls = release.assets.map(a => a.browser_download_url).join('\n');
-            require('fs').writeFileSync('assets.txt', urls);
-            console.log(`Found ${release.assets.length} assets.`);
+            if (!release.assets || release.assets.length === 0) {
+              console.log("❌ No assets found in this release.");
+              process.exit(1);
+            }
 
-      # Step 2: Upload assets one by one (with retry and logging)
-      - name: Upload Assets to Telegram (Safe Mode)
+            const fs = require('fs');
+            fs.writeFileSync('assets.txt', release.assets.map(a => a.browser_download_url).join('\n'));
+            console.log(`📦 Total assets in release: ${release.assets.length}`);
+            console.log("Assets:");
+            release.assets.forEach(a => console.log(`- ${a.name}`));
+
+      # Step 2: Filter assets by multiple patterns
+      - name: Filter Assets by Pattern(s)
+        shell: bash
+        run: |
+          patterns="${{ github.event.inputs.asset_pattern }}"
+          echo "Filtering assets using patterns: $patterns"
+
+          # Prepare empty filtered file
+          > filtered_assets.txt
+
+          # Convert patterns to array
+          IFS=',' read -ra pat_array <<< "$patterns"
+
+          # Loop over all patterns
+          for pat in "${pat_array[@]}"; do
+            grep -E "$(echo "$pat" | sed 's/\*/.*/g')" assets.txt >> filtered_assets.txt || true
+          done
+
+          # Remove duplicates
+          sort -u filtered_assets.txt -o filtered_assets.txt
+
+          # Count matching assets
+          filtered_count=$(grep -cve '^\s*$' filtered_assets.txt)
+          echo "📊 Number of matching assets: $filtered_count"
+
+          echo "Matching assets:"
+          cat filtered_assets.txt
+
+      # Step 3: Upload matching assets to Telegram
+      - name: Upload Assets to Telegram
         shell: bash
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          if [ ! -s assets.txt ]; then
-            echo "❌ No assets found to upload."
+          if [ ! -s filtered_assets.txt ]; then
+            echo "❌ No matching assets to upload."
             exit 0
           fi
 
-          echo "Starting uploads..."
-          while IFS= read -r url; do
+          echo "🚀 Starting upload of matching assets..."
+          uploaded_count=0
+
+          while IFS= read -r url || [ -n "$url" ]; do
             [ -z "$url" ] && continue
             filename=$(basename "$url")
-            echo "➡️ Processing: $filename"
-
+            echo "➡️ Downloading $filename..."
             curl -L -o "$filename" "$url" || { echo "❌ Failed to download $filename"; continue; }
 
             filesize=$(stat -c%s "$filename")
-            if [ "$filesize" -gt 2000000000 ]; then
-              echo "⚠️ Skipping $filename (size > 2GB)"
+            if [ "$filesize" -lt 1000 ]; then
+              echo "❌ $filename is too small. Skipping upload."
               continue
             fi
 
+            # Retry upload up to 3 times
+            success=false
             for attempt in 1 2 3; do
               echo "📤 Upload attempt $attempt for $filename..."
               response=$(curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
                 -F chat_id="${TELEGRAM_CHAT_ID}" \
                 -F document=@"$filename")
-
+              
               if echo "$response" | grep -q '"ok":true'; then
                 echo "✅ Uploaded $filename successfully."
+                uploaded_count=$((uploaded_count+1))
+                success=true
                 break
               else
                 echo "⚠️ Upload failed: $response"
-                if [ "$attempt" -eq 3 ]; then
-                  echo "❌ Giving up on $filename after 3 attempts."
-                else
+                if [ "$attempt" -lt 3 ]; then
                   echo "🔁 Retrying in 10s..."
                   sleep 10
                 fi
               fi
             done
-          done < assets.txt
 
-          echo "🏁 All uploads attempted."
+            if [ "$success" = false ]; then
+              echo "❌ Giving up on $filename after 3 attempts."
+            fi
+          done < filtered_assets.txt
+
+          echo "🏁 All matching assets attempted."
+          total_count=$(grep -cve '^\s*$' filtered_assets.txt)
+
+          # Send summary message to Telegram
+          summary="✅ Upload completed: $uploaded_count/$total_count assets successfully uploaded."
+          echo "$summary"
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -F chat_id="${TELEGRAM_CHAT_ID}" \
+            -F text="$summary"
